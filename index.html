@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Marcador Premium LED - Club Deportivo</title>
+    <!-- LIBRERÍA DE ABLY -->
+    <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+        body { background-color: #000; color: #fff; font-family: 'Helvetica Neue', Arial, sans-serif; overflow: hidden; display: flex; flex-direction: column; justify-content: space-between; height: 100vh; padding: 2vh; }
+        header { display: flex; justify-content: center; align-items: center; gap: 20px; height: 8vh; border-bottom: 2px solid #222; padding-bottom: 1vh; width: 100%; }
+        .torneo-texto { font-family: 'Arial Black', sans-serif; font-size: 4vh; color: #ffcc00; text-transform: uppercase; letter-spacing: 2px; white-space: nowrap; line-height: 7vh; }
+        .torneo-container { width: 25vw; height: 7vh; border: 2px dashed #444; border-radius: 8px; display: flex; justify-content: center; align-items: center; cursor: pointer; background: #050505; overflow: hidden; }
+        .torneo-img { width: 100%; height: 100%; object-fit: contain; display: none; }
+        .torneo-placeholder { font-size: 1.8vh; color: #666; font-weight: bold; text-transform: uppercase; text-align: center; }
+        .marcador-container { display: flex; justify-content: space-between; align-items: center; flex-grow: 1; height: 78vh; padding: 0 2vw; }
+        .equipo { text-align: center; width: 35%; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .nombre-equipo { font-family: 'Arial Black', sans-serif; font-size: 5.5vh; text-transform: uppercase; margin-bottom: 1vh; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .local { color: #e74c3c; } .visitante { color: #3498db; }
+        .escudo-container { width: 32vh; height: 32vh; margin-bottom: 1.5vh; display: flex; justify-content: center; align-items: center; border: 3px dashed #333; border-radius: 20px; cursor: pointer; background: #050505; overflow: hidden; }
+        .escudo-img { width: 95%; height: 95%; object-fit: contain; display: none; }
+        .escudo-placeholder { font-size: 2vh; color: #666; font-weight: normal; }
+        .goles { font-family: 'Arial Black', sans-serif; font-size: 22vh; line-height: 1; font-weight: bold; background: #111; border-radius: 20px; width: 95%; padding: 1vh 0; border: 4px solid #222; box-shadow: 0 0 25px rgba(255,255,255,0.03); cursor: pointer; }
+        .faltas-container { margin-top: 1.5vh; font-size: 3.5vh; color: #aaa; font-weight: bold; display: flex; align-items: center; gap: 15px; }
+        .contador-faltas { font-family: 'Arial Black', sans-serif; background: #222; color: #ffaa00; padding: 0.5vh 2vh; border-radius: 8px; cursor: pointer; border: 2px solid #444; }
+        .centro { text-align: center; width: 28%; display: flex; flex-direction: column; justify-content: space-around; align-items: center; height: 100%; padding: 1vh 0; }
+        .tiempo { font-size: 11vh; color: #2ecc71; font-family: monospace; font-weight: bold; cursor: pointer; }
+        .periodo { font-family: 'Arial Black', sans-serif; font-size: 3.5vh; color: #888; text-transform: uppercase; margin-top: -1vh; margin-bottom: 1vh; contenteditable: true; }
+        .publicidad-container { width: 100%; height: 22vh; border: 2px dashed #ffcc00; border-radius: 15px; background: #0a0a0a; display: flex; justify-content: center; align-items: center; cursor: pointer; overflow: hidden; }
+        .publicidad-img { width: 100%; height: 100%; object-fit: contain; display: none; }
+        .publicidad-placeholder { font-size: 1.8vh; color: #ffcc00; font-weight: bold; text-align: center; padding: 10px; }
+        footer { display: flex; flex-direction: column; align-items: center; justify-content: center; border-top: 2px solid #222; padding-top: 0.5vh; height: 12vh; position: relative; }
+        .fechahora { font-size: 3.2vh; color: #e0e0e0; font-weight: 500; text-align: center; letter-spacing: 0.5px; text-transform: lowercase; margin-bottom: 1vh; }
+        .fechahora::first-letter { text-transform: uppercase; }
+        .controles { position: absolute; right: 1vw; bottom: 1vh; display: flex; align-items: center; gap: 6px; background: #111; padding: 6px 12px; border-radius: 8px; border: 1px solid #333; z-index: 999; }
+        button { background: #222; color: #fff; border: 1px solid #444; padding: 6px 12px; font-size: 1.3vh; cursor: pointer; border-radius: 4px; font-weight: bold; white-space: nowrap; }
+        button:hover { background: #333; }
+        .btn-gol { background: #ffffff !important; color: #000000 !important; border: 1px solid #ccc; font-size: 1.6vh; padding: 5px 14px; }
+        .btn-gol:hover { background: #e6e6e6 !important; box-shadow: 0 0 10px rgba(255, 255, 255, 0.4); }
+        .btn-falta { background: #ffcc00 !important; color: #000000 !important; border: 1px solid #cca300; font-size: 1.3vh; }
+        .btn-falta:hover { background: #ffdb4d !important; box-shadow: 0 0 10px rgba(255, 204, 0, 0.5); }
+        .btn-etapa { background: #1a5276; } .btn-etapa:hover { background: #2980b9; }
+        .btn-reset { background: #7b241c; color: #fff; border-color: #c0392b; } .btn-reset:hover { background: #e74c3c; }
+        .input-file { display: none; }
+        .pantalla-gol { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(150, 0, 0, 0.9); z-index: 9999; display: none; justify-content: center; align-items: center; flex-direction: column; overflow: hidden; pointer-events: none; box-shadow: inset 0 0 200px rgba(255, 255, 255, 0.7); }
+        .texto-gol { font-family: 'Arial Black', Impact, sans-serif; font-size: 34vh; font-weight: 900; color: #fff; text-align: center; text-shadow: 0 0 50px #ffcc00, 0 0 100px #ff3300, 0 0 150px #ff0000; animation: pulsoGol 0.35s infinite alternate ease-in-out; z-index: 2; letter-spacing: 8px; }
+        @keyframes pulsoGol { 0% { transform: scale(0.85); text-shadow: 0 0 40px #ffcc00, 0 0 80px #ff3300; } 100% { transform: scale(1.18); text-shadow: 0 0 70px #ffffff, 0 0 130px #ffcc00, 0 0 200px #ff3300; } }
+        .confeti { position: absolute; width: 18px; height: 18px; opacity: 0.9; top: -20px; animation: caerConfeti 2.5s linear infinite; }
+        @keyframes caerConfeti { 0% { transform: translateY(0) rotate(0deg); opacity: 1; } 100% { transform: translateY(105vh) rotate(720deg); opacity: 0; } }
+        @media tv, (min-width: 2500px) { .controles { display: none !important; } }
+    </style>
+</head>
+<body>
+
+    <div id="efecto-gol" class="pantalla-gol"><div class="texto-gol">¡GOOOL!</div></div>
+
+    <header>
+        <div class="torneo-texto">CLUB RIO DE LA PLATA - TORNEO</div>
+        <div class="torneo-container" onclick="document.getElementById('file-torneo').click()">
+            <span class="torneo-placeholder" id="ph-torneo">[ Logo del Torneo ]</span>
+            <img id="img-torneo" class="torneo-img" alt="Logo Torneo">
+            <input type="file" id="file-torneo" class="input-file" accept="image/*" onchange="cargarImagen(this, 'img-torneo', 'ph-torneo')">
+        </div>
+    </header>
+
+    <div class="marcador-container">
+        <!-- LOCAL -->
+        <div class="equipo">
+            <div class="nombre-equipo local" contenteditable="true" id="name-local">LOCAL</div>
+            <div class="escudo-container" onclick="document.getElementById('file-local').click()">
+                <span class="escudo-placeholder" id="ph-local">Escudo Local</span>
+                <img id="img-local" class="escudo-img" alt="Escudo Local">
+                <input type="file" id="file-local" class="input-file" accept="image/*" onchange="cargarImagen(this, 'img-local', 'ph-local')">
+            </div>
+            <div class="goles" id="score-local" onclick="cambiarGoles('local', 1)">0</div>
+            <div class="faltas-container">FALTAS: <span class="contador-faltas" id="faltas-local" onclick="cambiarFaltas('local', 1)">0</span></div>
+        </div>
+
+        <!-- CENTRO -->
+        <div class="centro">
+            <div class="tiempo" id="reloj" onclick="toggleCronometro()">00:00</div>
+            <div class="periodo" contenteditable="true" id="periodo-num">1° TIEMPO</div>
+            <div class="publicidad-container" onclick="document.getElementById('file-pub').click()">
+                <span class="publicidad-placeholder" id="ph-pub">ESPACIO PUBLICITARIO<br><span style="font-size:1.4vh; font-weight:normal; color:#555;">(Click para subir banner)</span></span>
+                <img id="img-pub" class="publicidad-img" alt="Publicidad">
+                <input type="file" id="file-pub" class="input-file" accept="image/*" onchange="cargarImagen(this, 'img-pub', 'ph-pub')">
+            </div>
+        </div>
+
+        <!-- VISITANTE -->
+        <div class="equipo">
+            <div class="nombre-equipo visitante" contenteditable="true" id="name-visitante">VISITA</div>
+            <div class="escudo-container" onclick="document.getElementById('file-visitante').click()">
+                <span class="escudo-placeholder" id="ph-visitante">Escudo Visita</span>
+                <img id="img-visitante" class="escudo-img" alt="Escudo Visita">
+                <input type="file" id="file-visitante" class="input-file" accept="image/*" onchange="cargarImagen(this, 'img-visitante', 'ph-visitante')">
+            </div>
+            <div class="goles" id="score-visitante" onclick="cambiarGoles('visitante', 1)">0</div>
+            <div class="faltas-container">FALTAS: <span class="contador-faltas" id="faltas-visitante" onclick="cambiarFaltas('visitante', 1)">0</span></div>
+        </div>
+    </div>
+
+    <footer>
+        <div class="fechahora" id="txt-fechahora">Cargando fecha...</div>
+        <div class="controles">
+            <button onclick="toggleCronometro()" id="btn-iniciar">Iniciar/Pausar</button>
+            <button onclick="resetCronometro()">Reset Tiempo</button>
+            <button class="btn-etapa" onclick="alternarEtapa()">Cambiar Tiempo (1°/2°)</button>
+            <button class="btn-gol" onclick="cambiarGoles('local', 1)">+1 Loc</button>
+            <button class="btn-gol" onclick="cambiarGoles('local', -1)">-1 Loc</button>
+            <button class="btn-gol" onclick="cambiarGoles('visitante', 1)">+1 Vis</button>
+            <button class="btn-gol" onclick="cambiarGoles('visitante', -1)">-1 Vis</button>
+            <button class="btn-falta" onclick="cambiarFaltas('local', -1)">-1 Falta Loc</button>
+            <button class="btn-falta" onclick="cambiarFaltas('visitante', -1)">-1 Falta Vis</button>
+            <button class="btn-reset" onclick="resetTodo()">Reset Partido</button>
+        </div>
+    </footer>
+
+    <script>
+        // CONEXIÓN DE ABLY (TV)
+        const ably = new Ably.Realtime('bsWgNA.Z8yJ6w:Q21Z_NOjHZjPC2pQ5Zu2m-vwRH5iNngd8hQJ-w2ZCoY');
+        const canal = ably.channels.get('marcador-control');
+
+        canal.subscribe('comando', (mensaje) => {
+            const comando = mensaje.data;
+            switch(comando.accion) {
+                case 'toggleTiempo': toggleCronometro(); break;
+                case 'resetTiempo': resetCronometro(); break;
+                case 'cambiarEtapa': alternarEtapa(); break;
+                case 'golLocal': cambiarGoles('local', comando.valor); break;
+                case 'golVisita': cambiarGoles('visitante', comando.valor); break;
+                case 'faltaLocal': cambiarFaltas('local', comando.valor); break;
+                case 'faltaVisita': cambiarFaltas('visitante', comando.valor); break;
+                case 'resetPartido': resetTodoSinConfirmar(); break;
+            }
+        });
+
+        let golesLocal = 0, golesVisitante = 0, faltasLocal = 0, faltasVisitante = 0, tiempoSegundos = 0, cronometroInterval = null, corriendo = false;
+        const txtLocal = document.getElementById('score-local'), txtVisitante = document.getElementById('score-visitante'), txtFaltasLocal = document.getElementById('faltas-local'), txtFaltasVisitante = document.getElementById('faltas-visitante'), txtReloj = document.getElementById('reloj'), btnIniciar = document.getElementById('btn-iniciar'), txtFechaHora = document.getElementById('txt-fechahora'), txtPeriodo = document.getElementById('periodo-num'), capaGol = document.getElementById('efecto-gol');
+
+        function actualizarFechaHora() {
+            const ahora = new Date();
+            const opciones = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
+            txtFechaHora.innerText = `${ahora.toLocaleDateString('es-ES', opciones)} - ${ahora.getHours().toString().padStart(2, '0')}:${ahora.getMinutes().toString().padStart(2, '0')}`;
+        }
+        actualizarFechaHora(); setInterval(actualizarFechaHora, 10000);
+
+        function alternarEtapa() { txtPeriodo.innerText = txtPeriodo.innerText.trim() === "1° TIEMPO" ? "2° TIEMPO" : "1° TIEMPO"; }
+
+        function dispararEfectoGol() {
+            capaGol.style.display = 'flex';
+            const colores = ['#ffcc00', '#ff3300', '#2ecc71', '#3498db', '#ffffff', '#e67e22'];
+            for (let i = 0; i < 120; i++) {
+                const pedazo = document.createElement('div'); pedazo.classList.add('confeti');
+                pedazo.style.left = Math.random() * 100 + 'vw'; pedazo.style.backgroundColor = colores[Math.floor(Math.random() * colores.length)];
+                pedazo.style.animationDelay = Math.random() * 2 + 's'; pedazo.style.animationDuration = (Math.random() * 1.2 + 1.2) + 's';
+                pedazo.style.transform = `scale(${Math.random() * 1.2 + 0.6})`; capaGol.appendChild(pedazo);
+            }
+            setTimeout(() => { capaGol.style.display = 'none'; document.querySelectorAll('.confeti').forEach(c => c.remove()); }, 3000);
+        }
+
+        function cargarImagen(input, imgId, placeholderId) {
+            const archivo = input.files[0];
+            if (archivo) {
+                const reader = new FileReader();
+                reader.onload = function(e) { document.getElementById(imgId).src = e.target.result; document.getElementById(imgId).style.display = 'block'; document.getElementById(placeholderId).style.display = 'none'; }
+                reader.readAsDataURL(archivo);
+            }
+        }
+
+        function cambiarGoles(equipo, cantidad) {
+            if (equipo === 'local') { golesLocal = Math.max(0, golesLocal + cantidad); txtLocal.innerText = golesLocal; if(cantidad > 0) dispararEfectoGol(); }
+            else { golesVisitante = Math.max(0, golesVisitante + cantidad); txtVisitante.innerText = golesVisitante; if(cantidad > 0) dispararEfectoGol(); }
+        }
+
+        function cambiarFaltas(equipo, cantidad) {
+            if (equipo === 'local') { faltasLocal = Math.max(0, faltasLocal + cantidad); txtFaltasLocal.innerText = faltasLocal; }
+            else { faltasVisitante = Math.max(0, faltasVisitante + cantidad); txtFaltasVisitante.innerText = faltasVisitante; }
+        }
+
+        function actualizarReloj() { tiempoSegundos++; txtReloj.innerText = `${Math.floor(tiempoSegundos / 60).toString().padStart(2, '0')}:${(tiempoSegundos % 60).toString().padStart(2, '0')}`; }
+
+        function toggleCronometro() {
+            if (corriendo) { clearInterval(cronometroInterval); btnIniciar.innerText = "Reanudar"; txtReloj.style.color = "#ffcc00"; }
+            else { cronometroInterval = setInterval(actualizarReloj, 1000); btnIniciar.innerText = "Pausar"; txtReloj.style.color = "#2ecc71"; }
+            corriendo = !corriendo;
+        }
+
+        function resetCronometro() { clearInterval(cronometroInterval); corriendo = false; tiempoSegundos = 0; txtReloj.innerText = "00:00"; txtReloj.style.color = "#2ecc71"; btnIniciar.innerText = "Iniciar"; }
+        
+        function resetTodoSinConfirmar() {
+            resetCronometro(); golesLocal = 0; golesVisitante = 0; faltasLocal = 0; faltasVisitante = 0;
+            txtLocal.innerText = 0; txtVisitante.innerText = 0; txtFaltasLocal.innerText = 0; txtFaltasVisitante.innerText = 0; txtPeriodo.innerText = "1° TIEMPO";
+        }
+        function resetTodo() { if(confirm("¿Reiniciar todo el partido?")) { resetTodoSinConfirmar(); } }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.target.hasAttribute('contenteditable')) return;
+            switch (e.key) {
+                case ' ': e.preventDefault(); toggleCronometro(); break;
+                case '1': cambiarGoles('local', 1); break;
+                case 'q': cambiarGoles('local', -1); break;
+                case '2': cambiarGoles('visitante', 1); break;
+                case 'w': cambiarGoles('visitante', -1); break;
+                case '3': cambiarFaltas('local', 1); break;
+                case 'e': cambiarFaltas('local', -1); break;
+                case '4': cambiarFaltas('visitante', 1); break;
+                case 'r': cambiarFaltas('visitante', -1); break;
+            }
+        });
+    </script>
+</body>
+</html>
